@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  minio:
+    image: minio/minio
+    container_name: minio-server
+    ports:
+      - "9000:9000"
+      - "9090:9090"
+    environment:
+      - MINIO_ACCESS_KEY=minioaccesskey
+      - MINIO_SECRET_KEY=miniosecretkey
+    volumes:
+      - ./data:/data
+    command:
+      server /data --console-address ":9090"
+
+  spark:
+    image: bitnami/spark:3.5.0
+    container_name: spark-master
+    environment:
+      SPARK_MODE: master
+      SPARK_MASTER_WEBUI_PORT: 9080
+      SPARK_MASTER_PORT: 7077
+    ports:
+      - "9080:9080"
+      - "7077:7077"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+  
+  spark-worker:
+    image: bitnami/spark:3.5.0
+    scale: 4
+    environment:
+      SPARK_MODE: worker
+      SPARK_WORKER_WEBUI_PORT: 8081
+      SPARK_WORKER_MEMORY: 16G
+      SPARK_WORKER_CORES: 8
+      SPARK_MASTER_URL: spark://spark-master:7077
+    depends_on:
+      - spark
+    
+  etl:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: my_spark
+    volumes:
+      - ./scripts:/scripts
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - minio
+      - spark
+      - spark-worker
